@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Japanse Food Game - Oishii Challenge</title>
+    <!-- Tailwind CSS via CDN is prima voor kleine projecten op Netlify -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .drag-item { cursor: grab; transition: all 0.2s; user-select: none; }
+        .drag-item:active { cursor: grabbing; transform: scale(1.1); }
+        .drop-zone { min-height: 180px; transition: all 0.3s; }
+        .drop-zone.over { background-color: #fef08a !important; border-color: #facc15 !important; transform: scale(1.02); }
+        
+        .card-flip { perspective: 1000px; cursor: pointer; height: 180px; }
+        .card-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; height: 100%; }
+        .card-flip.flipped .card-inner { transform: rotateY(180deg); }
+        .card-front, .card-back { backface-visibility: hidden; position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 24px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); padding: 10px; text-align: center; }
+        .card-back { transform: rotateY(180deg); }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .pulse-btn {
+            animation: pulse-glow 2s infinite;
+        }
+
+        /* Verberging van Romaji en Vertaling */
+        .hint-text { transition: opacity 0.3s; }
+        .hint-hidden { opacity: 0 !important; visibility: hidden !important; height: 0; overflow: hidden; }
+
+        .bento-box { background: #b91c1c; border: 8px solid #7f1d1d; border-radius: 30px; min-height: 350px; position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0.5rem; }
+        .food-bounce { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Grote fonts voor Hiragana */
+        .hiragana-lg { font-size: 3.5rem; line-height: 1; font-weight: 900; font-family: sans-serif; }
+        .hiragana-md { font-size: 2.5rem; line-height: 1.2; font-weight: 800; font-family: sans-serif; }
+    </style>
+</head>
+<body class="bg-indigo-50 font-sans p-4 md:p-8 text-slate-900">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <div class="flex flex-col items-center justify-center gap-2">
+                <div class="flex items-center gap-4">
+                    <h1 class="text-5xl font-black text-indigo-600">🍜 おいしい チャレンジ！</h1>
+                    <button onclick="showTitleHint()" class="bg-white hover:bg-indigo-100 text-indigo-600 p-3 rounded-2xl shadow-md border-2 border-indigo-200 transition active:scale-90 flex items-center gap-2" title="Hoe spreek je dit uit?">
+                        <span class="text-2xl">💡</span>
+                    </button>
+                </div>
+                <div id="title-hint" class="hint-text hint-hidden bg-white px-6 py-2 rounded-full shadow-lg border-2 border-indigo-500">
+                    <span class="text-indigo-600 font-black italic text-lg">Oishii Charenji!</span>
+                </div>
+            </div>
+            <p class="text-xl text-indigo-400 font-medium mt-2">Vul je bento box met de juiste ingrediënten.</p>
+        </header>
+
+        <!-- Sectie 1: Grote Flashcards -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 text-indigo-800 flex items-center gap-2">
+                <span>1. Woordenschat oefenen</span> <span class="text-3xl">🔄</span>
+            </h2>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4" id="flashcards"></div>
+        </section>
+
+        <!-- Sectie 2: Bento Box Maker -->
+        <section class="mb-16 pb-20">
+            <h2 class="text-2xl font-bold mb-6 text-indigo-800 flex items-center gap-2">
+                <span>2. De Bento Box Maker</span> <span class="text-3xl">🍱</span>
+            </h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                <!-- Bestelling Scherm -->
+                <div class="bg-white p-6 rounded-[40px] shadow-xl border-4 border-indigo-100">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-4 border-b pb-6 gap-4">
+                        <h3 class="text-2xl font-black text-indigo-900">De Bestelling:</h3>
+                        <button onclick="showHints()" class="pulse-btn bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-3xl font-black text-xl shadow-xl transition transform active:scale-95 flex items-center gap-3">
+                            <span class="text-2xl">💡</span>
+                            <span>SPIEKKNOP</span>
+                        </button>
+                    </div>
+                    
+                    <div id="bento-order" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 mt-4"></div>
+                    
+                    <div class="space-y-4">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest text-center">Tik op de juiste woorden:</h4>
+                        <div id="ingredient-buttons" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <!-- Knoppen worden dynamisch gevuld -->
+                        </div>
+                    </div>
+
+                    <button onclick="resetBento()" class="mt-8 text-indigo-300 font-bold text-sm underline block w-full text-center hover:text-indigo-500">Box helemaal leegmaken</button>
+                </div>
+
+                <!-- De Bento Box Visueel -->
+                <div>
+                    <div class="bento-box p-6 shadow-2xl" id="bento-display"></div>
+                    <div class="mt-6 bg-indigo-600 text-white p-6 rounded-[30px] shadow-lg">
+                        <h3 class="font-black text-lg mb-2">Hoe speel je dit?</h3>
+                        <p class="text-indigo-100 text-sm">Kijk naar de bestelling hiernaast. Tik op de Japanse woorden die in de box moeten. Verzamel alle 4 de soorten om te winnen!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Data model
+        const vocabulary = [
+            { kana: 'たまご', romaji: 'tamago', english: 'Ei', emoji: '🥚' },
+            { kana: 'ごはん', romaji: 'gohan', english: 'Rijst', emoji: '🍚' },
+            { kana: 'みず', romaji: 'mizu', english: 'Water', emoji: '💧' },
+            { kana: 'パン', romaji: 'pan', english: 'Brood', emoji: '🍞' },
+            { kana: 'ケーキ', romaji: 'keeki', english: 'Taart', emoji: '🍰' },
+            { kana: 'にく', romaji: 'niku', english: 'Vlees', emoji: '🥩' },
+            { kana: 'しお', romaji: 'shio', english: 'Zout', emoji: '🧂' },
+            { kana: 'トマト', romaji: 'tomato', english: 'Tomaat', emoji: '🍅' },
+            { kana: 'えび', romaji: 'ebi', english: 'Garnaal', emoji: '🦐' },
+            { kana: 'ポテト', romaji: 'poteto', english: 'Patat', emoji: '🍟' },
+            { kana: 'りんご', romaji: 'ringo', english: 'Appel', emoji: '🍎' },
+            { kana: 'さかな', romaji: 'sakana', english: 'Vis', emoji: '🐟' },
+            { kana: 'すし', romaji: 'sushi', english: 'Sushi', emoji: '🍣' },
+            { kana: 'ばなな', romaji: 'banana', english: 'Banaan', emoji: '🍌' },
+            { kana: 'くろわっさん', romaji: 'kurowassan', english: 'Croissant', emoji: '🥐' },
+            { kana: 'みるく', romaji: 'miruku', english: 'Melk', emoji: '🥛' },
+            { kana: 'あめ', romaji: 'ame', english: 'Snoep', emoji: '🍬' },
+            { kana: 'いちご', romaji: 'ichigo', english: 'Aardbei', emoji: '🍓' }
+        ];
+
+        let currentOrder = {};
+        let bentoContents = {};
+
+        function initApp() {
+            renderFlashcards();
+            renderIngredientButtons();
+            generateNewOrder();
+        }
+
+        function renderFlashcards() {
+            const container = document.getElementById('flashcards');
+            if(!container) return;
+            container.innerHTML = '';
+            const displayWords = [...vocabulary].sort(() => Math.random() - 0.5).slice(0, 6);
+            displayWords.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card-flip';
+                card.innerHTML = `
+                    <div class="card-inner w-full">
+                        <div class="card-front bg-white text-3xl font-black text-indigo-600 border-2 border-indigo-100">
+                            ${item.kana}
+                        </div>
+                        <div class="card-back bg-indigo-600 text-white border-2 border-indigo-700">
+                            <div class="text-lg font-black mb-1">${item.english}</div>
+                            <div class="text-[10px] font-medium opacity-80 italic">${item.romaji}</div>
+                        </div>
+                    </div>
+                `;
+                card.onclick = () => card.classList.toggle('flipped');
+                container.appendChild(card);
+            });
+        }
+
+        function renderIngredientButtons() {
+            const container = document.getElementById('ingredient-buttons');
+            if(!container) return;
+            container.innerHTML = '';
+            vocabulary.forEach(item => {
+                const btn = document.createElement('button');
+                btn.onclick = () => addFood(item.kana);
+                btn.className = "p-4 bg-white rounded-2xl hover:bg-indigo-50 border-2 border-indigo-100 shadow-sm transition-all flex flex-col items-center group active:scale-95";
+                btn.innerHTML = `
+                    <span class="hiragana-md text-indigo-700">${item.kana}</span>
+                    <span class="hint-text hint-hidden text-xs text-indigo-400 font-bold uppercase mt-1 tracking-widest">
+                        ${item.romaji} (${item.english})
+                    </span>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function generateNewOrder() {
+            currentOrder = {};
+            const shuffled = [...vocabulary].sort(() => Math.random() - 0.5);
+            const numItems = 4; 
+            for(let i=0; i < numItems; i++) {
+                const item = shuffled[i];
+                currentOrder[item.kana] = 1 + Math.floor(Math.random() * 2);
+            }
+            renderOrder();
+            resetBento();
+        }
+
+        function renderOrder() {
+            const container = document.getElementById('bento-order');
+            if(!container) return;
+            container.innerHTML = '';
+            for (const [kana, count] of Object.entries(currentOrder)) {
+                const item = vocabulary.find(v => v.kana === kana);
+                container.innerHTML += `
+                    <div class="flex flex-col bg-indigo-50 p-4 rounded-[24px] border-2 border-indigo-100 text-center shadow-inner">
+                        <span class="hiragana-lg text-indigo-900 leading-tight">${count}x ${kana}</span>
+                        <div class="hint-text hint-hidden mt-1 bg-white/80 rounded-full py-1">
+                             <span class="text-xs font-black text-indigo-500 uppercase italic">${item.romaji} (${item.english})</span>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function addFood(kana) {
+            const item = vocabulary.find(v => v.kana === kana);
+            bentoContents[kana] = (bentoContents[kana] || 0) + 1;
+            
+            const foodEl = document.createElement('span');
+            foodEl.className = 'text-7xl food-bounce cursor-default select-none';
+            foodEl.innerText = item.emoji;
+            document.getElementById('bento-display').appendChild(foodEl);
+            checkBento();
+        }
+
+        function checkBento() {
+            let isCorrect = true;
+            for (const key in currentOrder) {
+                if (bentoContents[key] !== currentOrder[key]) isCorrect = false;
+            }
+            for (const key in bentoContents) {
+                if (!currentOrder[key] || bentoContents[key] > currentOrder[key]) isCorrect = false;
+            }
+
+            if (isCorrect) {
+                setTimeout(() => {
+                    const display = document.getElementById('bento-display');
+                    display.classList.add('ring-8', 'ring-green-400', 'bg-red-800');
+                    display.innerHTML = `
+                        <div class="w-full text-center py-10">
+                            <span class="text-8xl block mb-4">✨ 🍱 ✨</span>
+                            <span class="text-white text-3xl font-black uppercase tracking-widest block mb-6">Oishii!</span>
+                            <button onclick="generateNewOrder()" class="bg-white text-green-600 px-12 py-4 rounded-full font-black text-2xl shadow-2xl hover:scale-110 transition active:scale-95">Volgende Box</button>
+                        </div>`;
+                }, 400);
+            }
+        }
+
+        function resetBento() {
+            bentoContents = {};
+            const display = document.getElementById('bento-display');
+            display.innerHTML = '';
+            display.className = 'bento-box p-6';
+        }
+
+        function showHints() {
+            const hints = document.querySelectorAll('.hint-text');
+            hints.forEach(h => h.classList.remove('hint-hidden'));
+            setTimeout(() => hints.forEach(h => h.classList.add('hint-hidden')), 5000);
+        }
+
+        function showTitleHint() {
+            const titleHint = document.getElementById('title-hint');
+            titleHint.classList.remove('hint-hidden');
+            setTimeout(() => titleHint.classList.add('hint-hidden'), 3000);
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
